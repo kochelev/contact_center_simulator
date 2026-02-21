@@ -1,0 +1,67 @@
+version: '3.7'
+
+volumes:
+  data_prometheus:
+    driver: local
+  data_grafana:
+    driver: local
+
+networks:
+  front-tier:
+  back-tier:
+
+services:
+  prometheus:
+    image: prom/prometheus:v3.4.1
+    container_name: prometheus
+    volumes:
+      - ./:/etc/prometheus/
+      - ./prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.retention.time=2m'
+      - '--storage.tsdb.path=/prometheus'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - '--web.enable-remote-write-receiver'
+    ports:
+      - 9090:9090
+    restart: always
+    networks:
+      - back-tier
+    depends_on:
+      - pushgateway
+
+  pushgateway:
+    image: prom/pushgateway
+    container_name: pushgateway
+    restart: always
+    expose:
+      - 9091
+    ports:
+      - "9091:9091"
+    networks:
+      - back-tier
+
+  grafana:
+    image: grafana/grafana:9.0.0
+    container_name: grafana
+    env_file:
+      - ./.env_vars
+    environment:
+      - ROOT_URL=https://${GRAFANA_DOMAIN}
+      - GF_SECURITY_ADMIN_USER=${GRAFANA_LOGIN}
+      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_DASHBOARDS_MIN_REFRESH_INTERVAL=1s
+      - GF_LOG_LEVEL=DEBUG
+    restart: always
+    depends_on:
+      - prometheus
+    ports:
+      - 3000:3000
+    volumes:
+      - ./grafana:/var/lib/grafana:rw
+    networks:
+      - back-tier
+      - front-tier
